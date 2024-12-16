@@ -1,6 +1,5 @@
 import streamlit as st
 import requests
-import plotly.io as pio
 from streamlit.components.v1 import html
 
 # URLs del backend
