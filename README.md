@@ -24,8 +24,8 @@ pip install -r requirements.txt
 1. Clona este repositorio:
 
 ```bash
-git clone <URL_DEL_REPOSITORIO>
-cd <NOMBRE_DEL_PROYECTO>
+git clone (https://github.com/santiagog1025/Bot_financiero)
+cd Bot_financiero
 ```
 
 2. Instala las dependencias:
@@ -37,7 +37,7 @@ pip install -r requirements.txt
 3. Configura las variables de entorno en un archivo `.env`:
 
 ```env
-OPENAI_API_KEY=<TU_CLAVE_API_OPENAI>
+GROQ_API_KEY=<TU_CLAVE_API_GROQ>
 ```
 
 ## Uso
@@ -50,11 +50,6 @@ OPENAI_API_KEY=<TU_CLAVE_API_OPENAI>
 uvicorn main:app --reload
 ```
 
-2. Accede a la documentación interactiva del API:
-
-```
-http://127.0.0.1:8000/docs
-```
 
 ### Frontend
 
