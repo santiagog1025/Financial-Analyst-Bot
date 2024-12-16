@@ -12,9 +12,8 @@ import pandas as pd
 import operator
 import yfinance as yf
 import pandas as pd
-import plotly.graph_objects as go
 import pandas as pd
-from plotly.subplots import make_subplots
+
 from typing import Dict
 from datetime import datetime
 # Obtener la clave de API desde las variables de entorno
@@ -33,66 +32,7 @@ def ObtenerDatosFinancieros(ticker: str) -> pd.DataFrame:
     df = yf.download(ticker, period="5y")  # Últimos 5 años de datos
     datos_financieros =  df.sort_values(by='Date', ascending=False)
     return datos_financieros
-def generar_graficos(datos_financieros: pd.DataFrame, ticker: str) -> str:
-    """
-    Genera gráficos financieros interactivos utilizando Plotly.
 
-    Args:
-        datos_financieros (pd.DataFrame): DataFrame con los datos financieros.
-        ticker (str): Símbolo del ticker de la empresa.
-
-    Returns:
-        str: Ruta del archivo HTML generado con los gráficos.
-    """
-    # Verificar si el DataFrame contiene las columnas necesarias
-    columnas_requeridas = ['Open', 'High', 'Low', 'Close', 'Volume']
-    for columna in columnas_requeridas:
-        if columna not in datos_financieros.columns:
-            raise ValueError(f"El DataFrame no contiene la columna '{columna}'.")
-
-    # Calcular medias móviles
-    datos_financieros['MA20'] = datos_financieros['Close'].rolling(window=20).mean()
-    datos_financieros['MA50'] = datos_financieros['Close'].rolling(window=50).mean()
-
-    # Crear subplots: 2 filas (Gráfico de velas y volumen)
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                        vertical_spacing=0.02, subplot_titles=(f'Gráfico de Velas de {ticker}',
-                                                               'Volumen de Transacciones'),
-                        row_heights=[0.7, 0.3])
-
-    # Gráfico de velas
-    fig.add_trace(go.Candlestick(x=datos_financieros.index,
-                                 open=datos_financieros['Open'],
-                                 high=datos_financieros['High'],
-                                 low=datos_financieros['Low'],
-                                 close=datos_financieros['Close'],
-                                 name='Velas'),
-                  row=1, col=1)
-
-    # Agregar medias móviles al gráfico de velas
-    fig.add_trace(go.Scatter(x=datos_financieros.index, y=datos_financieros['MA20'],
-                             mode='lines', name='MA 20 días'),
-                  row=1, col=1)
-    fig.add_trace(go.Scatter(x=datos_financieros.index, y=datos_financieros['MA50'],
-                             mode='lines', name='MA 50 días'),
-                  row=1, col=1)
-
-    # Gráfico de volumen
-    fig.add_trace(go.Bar(x=datos_financieros.index, y=datos_financieros['Volume'],
-                         showlegend=False),
-                  row=2, col=1)
-
-    # Actualizar el diseño
-    fig.update_layout(title=f'Análisis Financiero de {ticker}',
-                      yaxis_title='Precio',
-                      xaxis_title='Fecha',
-                      xaxis_rangeslider_visible=False)
-
-    # Guardar el gráfico como archivo HTML
-    ruta_html = f'{ticker}_analisis_financiero.html'
-    fig.write_html(ruta_html)
-
-    return ruta_html
 @tool
 def ObtenerNoticias(ticker: str) -> str:
     """
@@ -153,7 +93,7 @@ class AgenteAnalizarDatos:
         Inicializa el agente de análisis de datos financieros.
         """
         # Inicializar el modelo de lenguaje con la clave de API
-        self.llm = ChatGroq(temperature=0, model="llama-3.1-70b-versatile")
+        self.llm = ChatGroq(temperature=0, model="llama-3.3-70b-versatile")
 
     def ejecutar(self, datos_financieros: pd.DataFrame, consulta: str) -> str:
         """
@@ -208,7 +148,7 @@ class AgenteAnalizarDatos:
 class AgenteAsesorFinanciero:
     def __init__(self):
         # Inicializa el LLM de OpenAI con la clave API proporcionada
-        self.llm = ChatGroq(temperature=1, model="llama-3.1-70b-versatile")
+        self.llm = ChatGroq(temperature=1, model="llama-3.3-70b-versatile")
         # Define la plantilla del prompt para extraer el ticker
         self.prompt = PromptTemplate(
             input_variables=["consulta","respuesta_analisis","noticias","fecha"],

@@ -1,14 +1,18 @@
 import streamlit as st
 import requests
-from io import BytesIO
+import plotly.io as pio
+from streamlit.components.v1 import html
 
-# URL del backend
-BACKEND_URL = "http://127.0.0.1:8000/generar_reporte/"
+# URLs del backend
+BACKEND_URL_DATOS = "http://127.0.0.1:8000/generar_datos/"
+BACKEND_URL_PDF = "http://127.0.0.1:8000/descargar_pdf/"
 
 st.title("Generador de Reportes Financieros")
 
-# Inicializar una variable para almacenar el PDF generado
-pdf_data = None
+# Variables para almacenar los resultados
+reporte_texto = None
+ruta_figura = None
+reporte_id = None
 
 # Formulario de entrada
 with st.form("form_reporte"):
@@ -19,25 +23,59 @@ with st.form("form_reporte"):
     submit_button = st.form_submit_button(label="Generar Reporte")
     
     if submit_button:
-        # Enviar solicitud al backend
-        with st.spinner("Generando el informe..."):
-            response = requests.post(
-                BACKEND_URL,
-                data={"consulta": consulta}  # Enviar datos como form-data
+        # Obtener datos del reporte y la gráfica
+        with st.spinner("Generando datos del reporte..."):
+            datos_response = requests.post(
+                BACKEND_URL_DATOS,
+                data={"consulta": consulta}
             )
-            
-            if response.status_code == 200:
-                # Convertir la respuesta en un archivo PDF en memoria
-                pdf_data = BytesIO(response.content)
-                st.success("¡Informe generado con éxito!")
+            if datos_response.status_code == 200:
+                response_data = datos_response.json()
+                reporte_texto = response_data["reporte_texto"]
+                ruta_figura = response_data["ruta_figura"]
+                reporte_id = response_data["reporte_id"]
+                st.success("¡Datos cargados con éxito!")
             else:
-                st.error("Error al generar el informe. Intenta de nuevo.")
+                st.error("Error al cargar los datos del reporte.")
 
-# Mostrar el botón de descarga fuera del formulario
-if pdf_data:
-    st.download_button(
-        label="Descargar Informe PDF",
-        data=pdf_data,
-        file_name="reporte_financiero.pdf",
-        mime="application/pdf"
-    )
+# Función para mostrar el reporte
+def generar_report(reporte_texto):
+    st.subheader("Contenido del Reporte:")
+    st.write(reporte_texto)
+
+def mostrar_grafico(ruta_html):
+    st.subheader("Gráfica Financiera Interactiva:")
+    try:
+        # Leer el archivo HTML con UTF-8
+        with open(ruta_html, "r", encoding="UTF8") as f:
+            html_content = f.read()
+            # Renderizar el contenido HTML
+            html(html_content, height=700)
+    except Exception as e:
+        st.error(f"Error al cargar la gráfica: {e}")
+
+# Mostrar el contenido del reporte
+if reporte_texto:
+    generar_report(reporte_texto)
+
+# Mostrar la gráfica
+if ruta_figura:
+    mostrar_grafico(ruta_figura)
+
+# Botón para descargar el PDF
+if reporte_id:
+    if st.button("Descargar Informe PDF"):
+        with st.spinner("Generando PDF..."):
+            pdf_response = requests.post(
+                BACKEND_URL_PDF,
+                data={"reporte_id": reporte_id}
+            )
+            if pdf_response.status_code == 200:
+                st.download_button(
+                    label="Descargar Informe PDF",
+                    data=pdf_response.content,
+                    file_name="reporte_financiero.pdf",
+                    mime="application/pdf"
+                )
+            else:
+                st.error("Error al generar el PDF.")

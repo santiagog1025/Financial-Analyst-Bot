@@ -1,14 +1,17 @@
 from fastapi import FastAPI, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from model.ai_model import correr_modelo
-from utils import guardar_pdf
+from utils import guardar_pdf, generar_graficos
+import uuid
 
 app = FastAPI()
+# Diccionario para almacenar los resultados temporalmente
+cache = {}
 
-@app.post("/generar_reporte/")
-async def generar_reporte(consulta: str = Form(...)):
+@app.post("/generar_datos/")
+async def generar_datos(consulta: str = Form(...)):
     """
-    Genera un informe financiero en PDF para un ticker dado y una consulta específica.
+    Genera el contenido del reporte financiero y los datos para la gráfica.
     """
     # Ejecutar el modelo y obtener los datos
     estado_inicial = {
@@ -22,9 +25,39 @@ async def generar_reporte(consulta: str = Form(...)):
     }
     estado_final = correr_modelo(estado_inicial)
 
-    # Guardar el informe en PDF
-    reporte_pdf_path = f"reporte_financiero_{estado_final["ticker"][-1]}.pdf"
-    guardar_pdf(estado_final["respuesta_final"][-1], reporte_pdf_path)
+    # Preparar datos para la gráfica
+    ruta_figura = generar_graficos(estado_final["datos_financieros"][-1], estado_final["ticker"][-1])  # Retorna la ruta del archivo gráfico
+    reporte_texto = estado_final["respuesta_final"][-1]
+    # Generar un ID único para esta consulta
+    reporte_id = str(uuid.uuid4())
+
+    # Guardar los datos en caché
+    cache[reporte_id] = {
+        "reporte_texto": reporte_texto,
+        "ruta_figura": ruta_figura,
+        "consulta": consulta
+    }
+
+    return JSONResponse({
+        "reporte_texto": reporte_texto,
+        "ruta_figura": ruta_figura,
+        "reporte_id": reporte_id
+    })
+@app.post("/descargar_pdf/")
+async def descargar_pdf(reporte_id: str = Form(...)):
+    """
+    Genera y descarga el informe financiero en formato PDF utilizando datos almacenados.
+    """
+    # Verificar si el reporte existe en caché
+    if reporte_id not in cache:
+        return JSONResponse({"error": "Reporte no encontrado"}, status_code=404)
+
+    # Obtener los datos almacenados
+    reporte_texto = cache[reporte_id]["reporte_texto"]
+
+    # Generar el PDF
+    reporte_pdf_path = f"reporte_financiero_{reporte_id}.pdf"
+    guardar_pdf(reporte_texto, reporte_pdf_path)
 
     # Retornar el archivo PDF generado
     return FileResponse(
