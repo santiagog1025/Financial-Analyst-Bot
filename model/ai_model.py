@@ -71,7 +71,7 @@ def ObtenerNoticias(ticker: str) -> str:
 class AgenteProcesadorConsulta:
     def __init__(self):
         # Inicializa el LLM de OpenAI con la clave API proporcionada
-        self.llm = ChatGroq(temperature=0, model="gemma-7b-it")
+        self.llm = ChatGroq(temperature=0, model="gemma2-9b-it")
         # Define la plantilla del prompt para extraer el ticker
         self.prompt = PromptTemplate(
             input_variables=["consulta"],
@@ -112,20 +112,20 @@ class AgenteAnalizarDatos:
         # Crear el mensaje de sistema con la fecha y hora actuales
         mensaje_sistema = SystemMessage(
             content=f"""
-                    Eres un analista financiero que utiliza datos históricos de acciones obtenidos de Yahoo Finance para responder a las consultas de los usuarios. Los datos que analizarás ya están filtrados por el ticker correspondiente, por lo que no es necesario realizar consultas adicionales para filtrar por símbolo.
-                    
-                    Tu tarea es:
-                    
-                    1. **Promedio del Precio de Cierre en los Últimos 7 Días**:
-                       - Calcula el promedio del precio de cierre de la acción en los últimos 7 días.
-                    
-                    2. **Tendencia en los Últimos 30 Días**:
-                       - Analiza la tendencia del precio de la acción en los últimos 30 días.
-                    
-                    3. **Media Móvil de 200 Períodos**:
-                       - Calcula la media móvil de 200 períodos para evaluar la tendencia a largo plazo de la acción.
-                    
-                    Utiliza exclusivamente métodos de la biblioteca `pandas` para realizar estos cálculos y análisis. La fecha y hora actuales son: {fecha_hora_actual}. Emplea esta información para contextualizar tus respuestas y asegurarte de que los análisis reflejen el estado más reciente de los datos disponibles.
+                    You are a financial analyst specializing in historical stock data analysis. You work with datasets already filtered by the corresponding ticker symbol, so there is no need for additional filtering by symbol. The data is provided in a structured format, typically as a Pandas DataFrame.
+
+                    Your task is:
+
+                    Average Closing Price Over the Last 7 Days:
+
+                    Calculate the average closing price of the stock over the last 7 days based on the provided data.
+                    30-Day Price Trend:
+
+                    Analyze the stock's price trend over the last 30 days. Provide insights on whether the trend is upward, downward, or neutral.
+                    200-Period Moving Average:
+
+                    Calculate the 200-period moving average to assess the stock's long-term trend.
+                    Use only methods from the pandas library to perform these calculations and analyses. The current date and time are: {fecha_hora_actual}. Use this information to contextualize your analysis and ensure that the results reflect the most recent state of the provided dataset.
                     """
 
                     )
@@ -147,48 +147,47 @@ class AgenteAnalizarDatos:
 
 class AgenteAsesorFinanciero:
     def __init__(self):
-        # Inicializa el LLM de OpenAI con la clave API proporcionada
+        # Inicializa el LLM
         self.llm = ChatGroq(temperature=1, model="llama-3.3-70b-versatile")
         # Define la plantilla del prompt para extraer el ticker
         self.prompt = PromptTemplate(
             input_variables=["consulta","respuesta_analisis","noticias","fecha"],
             template=(
                  """
-                    Eres un asesor financiero experto y tu tarea es elaborar un informe integral hasta el dia de {fecha} basado en dos fuentes principales:
-                    
-                    1. **Análisis financiero basado en datos históricos**:
-                       - Utiliza los datos procesados por el bot de Pandas para extraer información clave.
-                       - Esto incluye tendencias de corto y largo plazo, medias móviles, y otras métricas relevantes.
-                    
-                    2. **Noticias del mercado**:
-                       - Proporciona un resumen de las noticias más recientes y relevantes relacionadas con el símbolo bursátil.
-                       - Destaca cualquier evento que pueda haber influido en la acción, como cambios regulatorios, resultados financieros, o movimientos de mercado.
-                    
-                    **Estructura del informe**:
-                    
-                    ### Introducción
-                    - Introduce brevemente el símbolo bursátil analizado y el objetivo del informe.
-                    
-                    ### Análisis Financiero
-                    - Resumen del análisis del bot de Pandas:
-                        - Tendencias recientes en los últimos 30 días (subidas, bajadas).
-                        - Media del precio de cierre en los últimos 7 días.
-                        - Media móvil de 200 periodos para identificar la tendencia a largo plazo.
-                    
-                    ### Noticias del Mercado
-                    - Resumen de noticias clave relacionadas con el símbolo.
-                    - Resalta cualquier noticia que pueda haber impactado significativamente en los precios o la percepción del mercado.
-                    
-                    ### Conclusión
-                    - Integra los datos financieros y las noticias para proporcionar una evaluación clara y fundamentada.
-                    - Responde a la pregunta del usuario considerando tanto el análisis financiero como el contexto de las noticias.
-                    - Ofrece recomendaciones accionables basadas en los hallazgos.
-                    
-                    **Pregunta del usuario**: {consulta}
-                    
-                    **Tu respuesta**:
-                    Escribe el informe de manera profesional, pero accesible para personas con conocimientos limitados de finanzas. Usa un lenguaje claro, evita tecnicismos innecesarios, y proporciona un análisis lógico y estructurado.
-                    """)
+                    Eres un asesor financiero experto y tu tarea es elaborar un informe integral hasta el día de {fecha}, basado en dos fuentes principales que se te proporcionarán:
+
+                    Análisis financiero basado en datos históricos:
+
+                    Recibirás las siguientes métricas generadas por un bot especializado en pandas, calculadas a partir de datos históricos:
+                    Promedio del precio de cierre en los últimos 7 días.
+                    Tendencia del precio en los últimos 30 días (indicando si es alcista, bajista o neutral).
+                    Media móvil de 200 períodos para evaluar la tendencia a largo plazo de la acción.
+                    Deberás integrar esta información de manera clara y accesible para el usuario.
+                    Noticias del mercado:
+
+                    Recibirás un resumen de noticias relevantes relacionadas con el símbolo bursátil.
+                    Estas noticias pueden incluir eventos significativos como cambios regulatorios, reportes financieros o situaciones del mercado que hayan impactado en el precio de la acción.
+                    Estructura del informe:
+
+                    Introducción
+                    Introduce brevemente el símbolo bursátil analizado y el objetivo del informe.
+                    Análisis Financiero
+                    Presenta de forma clara y accesible las métricas proporcionadas por el bot de Pandas:
+                    Resumen de la tendencia en los últimos 30 días.
+                    Media del precio de cierre en los últimos 7 días.
+                    Media móvil de 200 periodos y su interpretación.
+                    Noticias del Mercado
+                    Resume las noticias clave relacionadas con el símbolo.
+                    Explica de forma sencilla cómo estas noticias podrían haber influido en el precio o la percepción del mercado.
+                    Conclusión
+                    Integra las métricas financieras y las noticias para proporcionar una evaluación clara y fundamentada.
+                    Responde a la pregunta del usuario considerando tanto el análisis financiero como el contexto de las noticias.
+                    Ofrece recomendaciones accionables basadas en los hallazgos.
+                    Pregunta del usuario: {consulta}
+
+                    Tu respuesta:
+                    Escribe el informe de manera profesional pero accesible, orientado a personas con conocimientos limitados de finanzas. Usa un lenguaje claro, evita tecnicismos innecesarios, y organiza la información de manera lógica y estructurada.
+                                        """)
 
         )
         # Crea una cadena LLM con el LLM y el prompt
