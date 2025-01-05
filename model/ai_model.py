@@ -29,8 +29,8 @@ def ObtenerDatosFinancieros(ticker: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame: DataFrame con los datos financieros históricos.
     """
-    df = yf.download(ticker, period="5y")  # Últimos 5 años de datos
-    datos_financieros =  df.sort_values(by='Date', ascending=False)
+    df = yf.download(ticker, period="1y")  # Últimos 5 años de datos
+    datos_financieros =  df.sort_values(by='Date')
     return datos_financieros
 
 @tool
@@ -44,40 +44,43 @@ def ObtenerNoticias(ticker: str) -> str:
     Returns:
         str: Noticias obtenidas en formato de texto.
     """
-    # Inicializar la herramienta de búsqueda
-    wrapper = DuckDuckGoSearchAPIWrapper(region="de-de", time="d", max_results=2)
+    try:
+        # Inicializar la herramienta de búsqueda
+        wrapper = DuckDuckGoSearchAPIWrapper(region="de-de", time="d", max_results=2)
+        news_tool = DuckDuckGoSearchResults(api_wrapper=wrapper, source="news")
+        
+        # Ejecutar la búsqueda
+        resultados = news_tool.invoke({"query": ticker})
+        
+        # Verificar tipo de `resultados`
+        if isinstance(resultados, str):
+            # Si es una cadena, simplemente devuélvela
+            return resultados
+        elif isinstance(resultados, list):
+            # Procesar como lista de diccionarios
+            noticias = []
+            for resultado in resultados:
+                if isinstance(resultado, dict):  # Asegurarse de que cada elemento sea un diccionario
+                    titulo = resultado.get('title', 'Sin título')
+                    enlace = resultado.get('link', '#')
+                    snippet = resultado.get('snippet', 'Sin descripción')
+                    noticias.append(f"{titulo}\n{snippet}\n{enlace}")
+            return "\n\n".join(noticias)
+        else:
+            return "No se encontraron resultados válidos."
+    except Exception as e:
+        return f"Hubo un error al obtener las noticias de {ticker}: {str(e)}"
 
-    news_tool = DuckDuckGoSearchResults(api_wrapper=wrapper, source="news")
-    
-    # Ejecutar la búsqueda
-    resultados = news_tool.invoke({"query": ticker})
-    
-    # Verificar tipo de `resultados`
-    if isinstance(resultados, str):
-        # Si es una cadena, simplemente devuélvela
-        return resultados
-    elif isinstance(resultados, list):
-        # Procesar como lista de diccionarios
-        noticias = []
-        for resultado in resultados:
-            if isinstance(resultado, dict):  # Asegurarse de que cada elemento sea un diccionario
-                titulo = resultado.get('title', 'Sin título')
-                enlace = resultado.get('link', '#')
-                snippet = resultado.get('snippet', 'Sin descripción')
-                noticias.append(f"{titulo}\n{snippet}\n{enlace}")
-        return "\n\n".join(noticias)
-    else:
-        return "No se encontraron resultados válidos."
 class AgenteProcesadorConsulta:
     def __init__(self):
         # Inicializa el LLM de OpenAI con la clave API proporcionada
-        self.llm = ChatGroq(temperature=0, model="gemma2-9b-it")
+        self.llm = ChatGroq(temperature=0, model="llama-3.1-8b-instant")
         # Define la plantilla del prompt para extraer el ticker
         self.prompt = PromptTemplate(
             input_variables=["consulta"],
             template=(
-                "Eres un asistente financiero. Responde únicamente con el símbolo bursátil (ticker) de la siguiente consulta:\n"
-                "Consulta: '{consulta}'\n"
+                "Eres un asistente financiero. Responde únicamente con el símbolo bursátil no añadas ningun espacio ni nignun /n (ticker) de la siguiente consulta:"
+                "Consulta: '{consulta}'"
                 "Ticker:"
             )
         )
@@ -93,7 +96,7 @@ class AgenteAnalizarDatos:
         Inicializa el agente de análisis de datos financieros.
         """
         # Inicializar el modelo de lenguaje con la clave de API
-        self.llm = ChatGroq(temperature=0, model="llama-3.3-70b-versatile")
+        self.llm = ChatGroq(temperature=0, model="llama3-70b-8192")
 
     def ejecutar(self, datos_financieros: pd.DataFrame, consulta: str) -> str:
         """
@@ -110,25 +113,26 @@ class AgenteAnalizarDatos:
         fecha_hora_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Crear el mensaje de sistema con la fecha y hora actuales
-        mensaje_sistema = SystemMessage(
-            content=f"""
-                    You are a financial analyst specializing in historical stock data analysis. You work with datasets already filtered by the corresponding ticker symbol, so there is no need for additional filtering by symbol. The data is provided in a structured format, typically as a Pandas DataFrame.
-
+        mensaje_sistema = f"""
+                    You are a financial analyst specializing in historical stock data analysis. You work with datasets already filtered by the corresponding ticker symbol, so there is no need for additional filtering by symbol. 
+                    The data is provided in a structured format, typically as a Pandas DataFrame.
+                    Context: The dataset comes from Yahoo Finance and contains historical data for the last 5 years of the stock. 
+                    The data is structured as a Pandas DataFrame, with each row representing a trading day. The columns include, among others, the date, the opening price, closing price, high price, low price, and trading volume. 
+                    The Date column is set as the index of the DataFrame.
                     Your task is:
 
                     Average Closing Price Over the Last 7 Days:
 
                     Calculate the average closing price of the stock over the last 7 days based on the provided data.
-                    30-Day Price Trend:
+                    7-Day Price Trend:
 
                     Analyze the stock's price trend over the last 30 days. Provide insights on whether the trend is upward, downward, or neutral.
                     200-Period Moving Average:
 
                     Calculate the 200-period moving average to assess the stock's long-term trend.
-                    Use only methods from the pandas library to perform these calculations and analyses. The current date and time are: {fecha_hora_actual}. Use this information to contextualize your analysis and ensure that the results reflect the most recent state of the provided dataset.
+                    Use only methods from the pandas library to perform these calculations and analyses. 
+                    The current date and time are: {fecha_hora_actual}.If you already iterate more than 3 times on the same code just run the other step.
                     """
-
-                    )
 
         # Crear el agente de Pandas
         agente = create_pandas_dataframe_agent(
@@ -142,13 +146,13 @@ class AgenteAnalizarDatos:
         )
 
         # Ejecutar la consulta utilizando el agente con el mensaje de sistema
-        respuesta = agente.invoke({"input": [consulta], "messages": [mensaje_sistema]})
+        respuesta = agente.invoke({"input": ["What is the mean average of 200 periods and the price of the last 7 days?", mensaje_sistema]})
         return respuesta["output"]
 
 class AgenteAsesorFinanciero:
     def __init__(self):
         # Inicializa el LLM
-        self.llm = ChatGroq(temperature=1, model="llama-3.3-70b-versatile")
+        self.llm = ChatGroq(temperature=1, model="mixtral-8x7b-32768")
         # Define la plantilla del prompt para extraer el ticker
         self.prompt = PromptTemplate(
             input_variables=["consulta","respuesta_analisis","noticias","fecha"],
@@ -158,14 +162,14 @@ class AgenteAsesorFinanciero:
 
                     Análisis financiero basado en datos históricos:
 
-                    Recibirás las siguientes métricas generadas por un bot especializado en pandas, calculadas a partir de datos históricos:
+                    Recibirás las siguientes métricas generadas por un bot especializado en pandas: {respuesta_analisis}, calculadas a partir de datos históricos:
                     Promedio del precio de cierre en los últimos 7 días.
-                    Tendencia del precio en los últimos 30 días (indicando si es alcista, bajista o neutral).
+                    Tendencia del precio en los últimos 7 días (indicando si es alcista, bajista o neutral).
                     Media móvil de 200 períodos para evaluar la tendencia a largo plazo de la acción.
                     Deberás integrar esta información de manera clara y accesible para el usuario.
                     Noticias del mercado:
 
-                    Recibirás un resumen de noticias relevantes relacionadas con el símbolo bursátil.
+                    Recibirás un resumen de noticias relevantes relacionadas con el símbolo bursátil: {noticias}.
                     Estas noticias pueden incluir eventos significativos como cambios regulatorios, reportes financieros o situaciones del mercado que hayan impactado en el precio de la acción.
                     Estructura del informe:
 
@@ -173,7 +177,6 @@ class AgenteAsesorFinanciero:
                     Introduce brevemente el símbolo bursátil analizado y el objetivo del informe.
                     Análisis Financiero
                     Presenta de forma clara y accesible las métricas proporcionadas por el bot de Pandas:
-                    Resumen de la tendencia en los últimos 30 días.
                     Media del precio de cierre en los últimos 7 días.
                     Media móvil de 200 periodos y su interpretación.
                     Noticias del Mercado
@@ -210,6 +213,7 @@ class Estado(TypedDict):
     ruta_html: Annotated[List[str], operator.add]  # Ruta del archivo HTML generado para los gráficos
     noticias: Annotated[List[str], operator.add]  # Lista de noticias relacionadas
     respuesta_final: Annotated[List[str], operator.add]  # Respuesta final generada por el analista financiero
+
 grafico = StateGraph(Estado)
 
 def extraer_ticker(estado: Estado) -> Estado:
