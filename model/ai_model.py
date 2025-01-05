@@ -236,7 +236,7 @@ def analizar_datos(estado: Estado) -> Estado:
         estado["respuesta_analisis"].append(respuesta)
     return estado
 def obtener_noticias(estado: Estado) -> Estado:
-    if estado["ticker"]:
+    if estado["ticker"][-1]:
         ticker = estado["ticker"][-1]
         noticias = ObtenerNoticias(ticker)
         estado["noticias"].append(noticias)
