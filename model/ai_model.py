@@ -8,13 +8,9 @@ from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe
 from langchain_community.tools import DuckDuckGoSearchResults
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
 from typing import List, TypedDict, Annotated
-import pandas as pd
 import operator
 import yfinance as yf
 import pandas as pd
-import pandas as pd
-
-from typing import Dict
 from datetime import datetime
 # Obtener la clave de API desde las variables de entorno
 load_dotenv()

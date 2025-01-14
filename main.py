@@ -55,20 +55,9 @@ async def descargar_pdf(reporte_id: str = Form(...)):
         return JSONResponse({"error": "Reporte no encontrado"}, status_code=404)
     
     reporte_texto = cache[reporte_id]["reporte_texto"]
-    reporte_pdf_path = f"reporte_financiero_{cache[reporte_id]["ticker"]}.pdf"
 
     try:
         # Intentar guardar el PDF
-        guardar_pdf(reporte_texto, reporte_pdf_path)
+        guardar_pdf(reporte_texto)
     except Exception as e:
         return JSONResponse({"error": f"Error al generar el PDF: {str(e)}"}, status_code=500)
-
-    # Verifica si el archivo PDF se generó correctamente
-    if os.path.exists(reporte_pdf_path):
-        return FileResponse(
-            path=reporte_pdf_path,
-            media_type="application/pdf",
-            filename=f"reporte_financiero_{cache[reporte_id]["ticker"]}.pdf",
-        )
-    else:
-        return JSONResponse({"error": "Archivo PDF no encontrado"}, status_code=404)

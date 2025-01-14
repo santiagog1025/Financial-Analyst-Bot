@@ -6,72 +6,74 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from bs4 import BeautifulSoup
 from textwrap import wrap
+import os
 
-def guardar_pdf(contenido_markdown, archivo_pdf):
+def obtener_ruta_descargas(nombre_archivo):
     """
-    Convierte contenido Markdown almacenado en una variable a un archivo PDF,
-    interpretando las etiquetas HTML generadas, con márgenes adecuados y texto centrado.
-
+    Obtiene la ruta a la carpeta de descargas del sistema operativo y construye la ruta del archivo.
+    :param nombre_archivo: Nombre del archivo que se guardará en Descargas.
+    :return: Ruta completa del archivo en Descargas.
+    """
+    if os.name == "nt":  # Windows
+        from winreg import OpenKey, QueryValueEx, HKEY_CURRENT_USER
+        sub_key = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
+        with OpenKey(HKEY_CURRENT_USER, sub_key) as key:
+            descargas = QueryValueEx(key, "{374DE290-123F-4565-9164-39C4925E467B}")[0]
+    else:  # macOS o Linux
+        descargas = str(Path.home() / "Downloads")
+    
+    return os.path.join(descargas, nombre_archivo)
+def guardar_pdf(contenido_markdown, nombre_archivo="archivo.pdf"):
+    """
+    Convierte contenido Markdown a un archivo PDF respetando el formato básico de Markdown.
+    
     :param contenido_markdown: Texto en formato Markdown.
-    :param archivo_pdf: Ruta del archivo PDF de salida.
+    :param nombre_archivo: Nombre del archivo PDF de salida.
     """
     try:
-        # Convertir el contenido Markdown a HTML
-        contenido_html = markdown.markdown(contenido_markdown)
-
-        # Usar BeautifulSoup para interpretar el HTML
+        # Convertir Markdown a HTML
+        contenido_html = markdown(contenido_markdown)
         soup = BeautifulSoup(contenido_html, "html.parser")
         
         # Configurar el PDF con tamaño A4
+        archivo_pdf = obtener_ruta_descargas(nombre_archivo)
         pdf = canvas.Canvas(archivo_pdf, pagesize=A4)
         ancho_pagina, alto_pagina = A4
         
-        # Configurar márgenes (2.5 cm por cada lado) y centrar contenido verticalmente
-        margen_izquierdo = 70
-        margen_derecho = ancho_pagina - 70
-        margen_superior = alto_pagina - 100  # Mayor espacio superior para centrar
-        margen_inferior = 100
+        # Configurar márgenes
+        margen_izquierdo = 60
+        margen_derecho = ancho_pagina + 60
+        margen_superior = alto_pagina - 60
+        margen_inferior = 60
         y = margen_superior
 
         pdf.setFont("Helvetica", 10)
 
-        # Ancho del texto en puntos (para ajustar párrafos largos)
+        # Ancho del texto
         ancho_texto = margen_derecho - margen_izquierdo
 
         # Procesar cada elemento del HTML
         for tag in soup.contents:
-            if y < margen_inferior:  # Si alcanza el margen inferior, añadir nueva página
+            if y < margen_inferior:  # Si alcanza el margen inferior, crear nueva página
                 pdf.showPage()
                 pdf.setFont("Helvetica", 10)
                 y = margen_superior
 
-            if tag.name == "h1":
+            if isinstance(tag, str):  # Si es solo texto, lo procesamos directamente
+                y = escribir_parrafo(pdf, tag, margen_izquierdo, ancho_texto, y, margen_inferior, tipo="p")
+            elif tag.name == "h1":
                 pdf.setFont("Helvetica-Bold", 14)
-                y = escribir_parrafo_justificado(pdf, tag.text, margen_izquierdo, ancho_texto, y, margen_inferior, espacio_entre_lineas=20)
+                y = escribir_parrafo(pdf, tag, margen_izquierdo, ancho_texto, y, margen_inferior, tipo="h1")
             elif tag.name == "h2":
                 pdf.setFont("Helvetica-Bold", 12)
-                y = escribir_parrafo_justificado(pdf, tag.text, margen_izquierdo, ancho_texto, y, margen_inferior, espacio_entre_lineas=18)
+                y = escribir_parrafo(pdf, tag, margen_izquierdo, ancho_texto, y, margen_inferior, tipo="h2")
             elif tag.name == "p":
                 pdf.setFont("Helvetica", 10)
-                y = escribir_parrafo_justificado(pdf, tag.text, margen_izquierdo, ancho_texto, y, margen_inferior)
+                y = escribir_parrafo(pdf, tag, margen_izquierdo, ancho_texto, y, margen_inferior, tipo="p")
             elif tag.name == "ul":
                 for li in tag.find_all("li"):
-                    if y < margen_inferior:  # Verificar espacio disponible
-                        pdf.showPage()
-                        pdf.setFont("Helvetica", 10)
-                        y = margen_superior
-                    pdf.drawString(margen_izquierdo + 20, y, f"• {li.text}")  # Ajuste del margen
-                    y -= 14  # Espacio entre ítems de la lista
-            elif tag.name == "strong":
-                pdf.setFont("Helvetica-Bold", 10)
-                y = escribir_parrafo_justificado(pdf, tag.text, margen_izquierdo, ancho_texto, y, margen_inferior)
-            elif tag.name == "em":
-                pdf.setFont("Helvetica-Oblique", 10)
-                y = escribir_parrafo_justificado(pdf, tag.text, margen_izquierdo, ancho_texto, y, margen_inferior)
-            elif tag.name == "a":
-                texto_enlace = f"{tag.text} ({tag['href']})"
-                pdf.setFont("Helvetica", 10)
-                y = escribir_parrafo_justificado(pdf, texto_enlace, margen_izquierdo, ancho_texto, y, margen_inferior)
+                    texto_lista = f"• {li.text}"
+                    y = escribir_parrafo(pdf, texto_lista, margen_izquierdo + 20, ancho_texto - 20, y, margen_inferior, tipo="li")
         
         pdf.save()
         print(f"PDF generado correctamente: {archivo_pdf}")
@@ -79,32 +81,58 @@ def guardar_pdf(contenido_markdown, archivo_pdf):
     except Exception as e:
         print(f"Error al convertir el archivo: {e}")
 
-def escribir_parrafo_justificado(pdf, texto, x_inicial, ancho_texto, y, y_minimo, espacio_entre_lineas=14):
+def escribir_parrafo(pdf, tag, x_inicial, ancho_texto, y, y_minimo, tipo="p", espacio_entre_lineas=14):
     """
-    Escribe un párrafo justificado en el PDF respetando los márgenes y los saltos de línea.
-
+    Escribe un párrafo en el PDF respetando los márgenes y saltos de línea según el tipo de contenido Markdown,
+    incluyendo negritas y otros estilos.
+    
     :param pdf: Objeto Canvas de ReportLab.
-    :param texto: Texto del párrafo.
+    :param tag: Tag HTML a procesar (puede ser un párrafo, lista, etc.).
     :param x_inicial: Coordenada x inicial (margen izquierdo).
     :param ancho_texto: Ancho disponible para el texto.
     :param y: Coordenada y actual.
     :param y_minimo: Coordenada y mínima antes de un salto de página.
+    :param tipo: Tipo de elemento Markdown (párrafo, lista, etc.).
     :param espacio_entre_lineas: Espaciado entre líneas.
     :return: Nueva coordenada y.
     """
-    # Dividir el texto en líneas ajustadas al ancho disponible
+    # Si el tag es un objeto BeautifulSoup (un elemento HTML)
+    if isinstance(tag, str):
+        texto = tag
+    else:
+        # Manejar texto en negrita (strong, b)
+        if tag.name in ['strong', 'b']:
+            texto = f"**{tag.get_text()}**"
+            estilo = "Helvetica-Bold"
+        else:
+            texto = tag.get_text()
+            estilo = "Helvetica"
+    
     lineas = wrap(texto, width=int(ancho_texto / 6))  # Aproximadamente 6 puntos por carácter
     
     for linea in lineas:
-        if y < y_minimo:  # Verificar si queda espacio para otra línea
+        if y < y_minimo:  # Si no hay espacio suficiente, crear nueva página
             pdf.showPage()
             pdf.setFont("Helvetica", 10)
-            y = A4[1] - 100  # Reiniciar desde el margen superior
-        texto = pdf.beginText(x_inicial, y)
-        texto.setTextOrigin(x_inicial, y)
-        texto.textLine(linea)
-        pdf.drawText(texto)
-        y -= espacio_entre_lineas
+            y = A4[1] - 100  # Reiniciar coordenada y en la nueva página
+        
+        # Ajustar el tipo de formato basado en el tipo de tag Markdown
+        if tipo == "h1":
+            x_inicial = (A4[0] - pdf.stringWidth(linea, "Helvetica-Bold", 14)) / 2  # Centrar título h1
+            pdf.setFont("Helvetica-Bold", 14)
+            pdf.drawString(x_inicial, y, linea)
+        elif tipo == "h2":
+            x_inicial = (A4[0] - pdf.stringWidth(linea, "Helvetica-Bold", 12)) / 2  # Centrar título h2
+            pdf.setFont("Helvetica-Bold", 12)
+            pdf.drawString(x_inicial, y, linea)
+        elif tipo == "li":
+            pdf.setFont("Helvetica", 10)
+            pdf.drawString(x_inicial, y, linea)  # Para las listas, ajustamos el margen izquierdo
+        else:
+            pdf.setFont(estilo, 10)
+            pdf.drawString(x_inicial, y, linea)
+
+        y -= espacio_entre_lineas  # Moverse a la siguiente línea
 
     return y
 def generar_graficos(datos_financieros: pd.DataFrame, ticker: str) -> str:
@@ -163,7 +191,7 @@ def generar_graficos(datos_financieros: pd.DataFrame, ticker: str) -> str:
                       xaxis_rangeslider_visible=False)
 
     # Guardar el gráfico como archivo HTML
-    ruta_html = f'{ticker}_analisis_financiero.html'
+    ruta_html = f'C:\\Users\\nitro\Desktop\\Trabajos_genAi\\LangGraph\\rutas\\{ticker}_analisis_financiero.html'
     fig.write_html(ruta_html)
 
     return ruta_html
