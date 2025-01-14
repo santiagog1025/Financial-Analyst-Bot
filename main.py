@@ -35,6 +35,7 @@ async def generar_datos(consulta: str = Form(...)):
     # Guardar los datos en caché
     cache[reporte_id] = {
         "reporte_texto": reporte_texto,
+        "ticker": estado_final["ticker"][-1],
         "ruta_figura": ruta_figura,
         "consulta": consulta
     }
@@ -49,24 +50,25 @@ async def descargar_pdf(reporte_id: str = Form(...)):
     """
     Genera y descarga el informe financiero en formato PDF utilizando datos almacenados.
     """
-    # Verificar si el reporte existe en caché (o la ubicación donde se guarda el archivo)
+    # Verificar si el reporte existe en caché
     if reporte_id not in cache:
-        return {"error": "Reporte no encontrado"}, 404
-    else:
-        reporte_texto = cache[reporte_id]["reporte_texto"]
-        reporte_pdf_path = f"reporte_financiero_{reporte_id}.pdf"
+        return JSONResponse({"error": "Reporte no encontrado"}, status_code=404)
+    
+    reporte_texto = cache[reporte_id]["reporte_texto"]
+    reporte_pdf_path = f"reporte_financiero_{cache[reporte_id]["ticker"]}.pdf"
 
     try:
+        # Intentar guardar el PDF
         guardar_pdf(reporte_texto, reporte_pdf_path)
     except Exception as e:
-        return {"error": f"Error al generar el PDF: {str(e)}"}, 500
+        return JSONResponse({"error": f"Error al generar el PDF: {str(e)}"}, status_code=500)
 
-    # Verifica que el archivo existe antes de enviarlo
+    # Verifica si el archivo PDF se generó correctamente
     if os.path.exists(reporte_pdf_path):
         return FileResponse(
             path=reporte_pdf_path,
             media_type="application/pdf",
-            filename=f"reporte_financiero_{reporte_id}.pdf",
+            filename=f"reporte_financiero_{cache[reporte_id]["ticker"]}.pdf",
         )
     else:
-        return {"error": "Archivo PDF no encontrado"}, 404
+        return JSONResponse({"error": "Archivo PDF no encontrado"}, status_code=404)

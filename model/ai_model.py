@@ -1,12 +1,12 @@
 from langgraph.graph import StateGraph, END, START
-from langchain import PromptTemplate, LLMChain
+from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 from langchain_core.tools import tool
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
 from langchain_community.tools import DuckDuckGoSearchResults
 from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
-from langchain.schema import SystemMessage
 from typing import List, TypedDict, Annotated
 import pandas as pd
 import operator
@@ -46,7 +46,7 @@ def ObtenerNoticias(ticker: str) -> str:
     """
     try:
         # Inicializar la herramienta de búsqueda
-        wrapper = DuckDuckGoSearchAPIWrapper(region="us-en", time="5d", max_results=2)
+        wrapper = DuckDuckGoSearchAPIWrapper(region="us-en", time="10d", max_results=2)
         news_tool = DuckDuckGoSearchResults(api_wrapper=wrapper, source="news")
         
         # Ejecutar la búsqueda
@@ -85,9 +85,9 @@ class AgenteProcesadorConsulta:
             )
         )
         # Crea una cadena LLM con el LLM y el prompt
-        self.chain = LLMChain(llm=self.llm, prompt=self.prompt)
+        self.chain = self.prompt | self.llm | StrOutputParser()
     def extraer_ticker(self, consulta: str) -> str:
-        return self.chain.run(consulta)
+        return self.chain.invoke(consulta)
 
 
 class AgenteAnalizarDatos:
@@ -194,7 +194,7 @@ class AgenteAsesorFinanciero:
 
         )
         # Crea una cadena LLM con el LLM y el prompt
-        self.chain = LLMChain(llm=self.llm, prompt=self.prompt)
+        self.chain = self.prompt | self.llm | StrOutputParser()
     def responder(self, consulta: str, respuesta_analisis:str, noticias: str, fecha:str) -> str:
          # Empaquetar las variables como un diccionario
         inputs = {
@@ -203,7 +203,7 @@ class AgenteAsesorFinanciero:
             "noticias": noticias,
             "fecha": fecha
         }
-        return self.chain.run(inputs)
+        return self.chain.invoke(inputs)
     
 class Estado(TypedDict):
     consulta: Annotated[List[str], operator.add]   # Consulta proporcionada por el usuario
