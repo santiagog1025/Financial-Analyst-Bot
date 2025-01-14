@@ -65,16 +65,26 @@ if ruta_figura:
 if reporte_id:
     if st.button("Descargar Informe PDF"):
         with st.spinner("Generando PDF..."):
-            pdf_response = requests.post(
-                BACKEND_URL_PDF,
-                data={"reporte_id": reporte_id}
-            )
-            if pdf_response.status_code == 200:
-                st.download_button(
-                    label="Descargar Informe PDF",
-                    data=pdf_response.content,
-                    file_name="reporte_financiero.pdf",
-                    mime="application/pdf"
+            try:
+                pdf_response = requests.post(
+                    BACKEND_URL_PDF,
+                    data={"reporte_id": reporte_id},
+                    timeout=10  # Tiempo de espera en segundos
                 )
-            else:
-                st.error("Error al generar el PDF.")
+                if pdf_response.status_code == 200:
+                    # Verifica que los datos PDF están en el contenido de la respuesta
+                    pdf_content = pdf_response.content
+                    if pdf_content:
+                        # Usa st.download_button para descargar el archivo generado
+                        st.download_button(
+                            label="Descargar Informe PDF",
+                            data=pdf_content,
+                            file_name=f"reporte_financiero_{reporte_id}.pdf",
+                            mime="application/pdf"
+                        )
+                    else:
+                        st.error("El contenido del PDF está vacío.")
+                else:
+                    st.error(f"Error al generar el PDF. Código de estado: {pdf_response.status_code}")
+            except requests.exceptions.RequestException as e:
+                st.error(f"Error de conexión: {str(e)}")

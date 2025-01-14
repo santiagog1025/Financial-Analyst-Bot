@@ -152,7 +152,7 @@ class AgenteAnalizarDatos:
 class AgenteAsesorFinanciero:
     def __init__(self):
         # Inicializa el LLM
-        self.llm = ChatGroq(temperature=1, model="mixtral-8x7b-32768")
+        self.llm = ChatGroq(temperature=1, model="gemma2-9b-it")
         # Define la plantilla del prompt para extraer el ticker
         self.prompt = PromptTemplate(
             input_variables=["consulta","respuesta_analisis","noticias","fecha"],

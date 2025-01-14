@@ -3,6 +3,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from model.ai_model import correr_modelo
 from utils import guardar_pdf, generar_graficos
 import uuid
+import os
 
 app = FastAPI()
 # Diccionario para almacenar los resultados temporalmente
@@ -48,20 +49,24 @@ async def descargar_pdf(reporte_id: str = Form(...)):
     """
     Genera y descarga el informe financiero en formato PDF utilizando datos almacenados.
     """
-    # Verificar si el reporte existe en caché
+    # Verificar si el reporte existe en caché (o la ubicación donde se guarda el archivo)
     if reporte_id not in cache:
-        return JSONResponse({"error": "Reporte no encontrado"}, status_code=404)
+        return {"error": "Reporte no encontrado"}, 404
+    else:
+        reporte_texto = cache[reporte_id]["reporte_texto"]
+        reporte_pdf_path = f"reporte_financiero_{reporte_id}.pdf"
 
-    # Obtener los datos almacenados
-    reporte_texto = cache[reporte_id]["reporte_texto"]
+    try:
+        guardar_pdf(reporte_texto, reporte_pdf_path)
+    except Exception as e:
+        return {"error": f"Error al generar el PDF: {str(e)}"}, 500
 
-    # Generar el PDF
-    reporte_pdf_path = f"reporte_financiero_{reporte_id}.pdf"
-    guardar_pdf(reporte_texto, reporte_pdf_path)
-
-    # Retornar el archivo PDF generado
-    return FileResponse(
-        path=reporte_pdf_path,
-        media_type="application/pdf",
-        filename="reporte_financiero.pdf",
-    )
+    # Verifica que el archivo existe antes de enviarlo
+    if os.path.exists(reporte_pdf_path):
+        return FileResponse(
+            path=reporte_pdf_path,
+            media_type="application/pdf",
+            filename=f"reporte_financiero_{reporte_id}.pdf",
+        )
+    else:
+        return {"error": "Archivo PDF no encontrado"}, 404
