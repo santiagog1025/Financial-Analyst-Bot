@@ -45,9 +45,12 @@ def ObtenerNoticias(ticker: str) -> str:
         str: Noticias obtenidas en formato de texto.
     """
     try:
-        search = DuckDuckGoSearchResults(backend="news")
-
-        resultados =search.invoke(ticker)
+        # Inicializar la herramienta de búsqueda
+        wrapper = DuckDuckGoSearchAPIWrapper(region="us-en", time="5d", max_results=2)
+        news_tool = DuckDuckGoSearchResults(api_wrapper=wrapper, source="news")
+        
+        # Ejecutar la búsqueda
+        resultados = news_tool.invoke({"query": ticker})
         
         # Verificar tipo de `resultados`
         if isinstance(resultados, str):
