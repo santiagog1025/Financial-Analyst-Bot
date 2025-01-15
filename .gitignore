@@ -1,4 +1,4 @@
 .env
-__pycache__
-.pdf
-.html
+__pycache__/
+*.pdf
+*.html
