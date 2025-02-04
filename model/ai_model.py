@@ -42,11 +42,11 @@ def ObtenerNoticias(ticker: str) -> str:
     """
     try:
         # Inicializar la herramienta de búsqueda
-        wrapper = DuckDuckGoSearchAPIWrapper(region="us-en", time="10d", max_results=2)
-        news_tool = DuckDuckGoSearchResults(api_wrapper=wrapper, source="news")
+        wrapper = DuckDuckGoSearchAPIWrapper(region="us-en", time="10d", max_results=5)
+        news_tool = DuckDuckGoSearchResults(api_wrapper=wrapper)
         
         # Ejecutar la búsqueda
-        resultados = news_tool.invoke({"query": ticker})
+        resultados = news_tool.invoke({"query": f"{ticker} stock news"})
         
         # Verificar tipo de `resultados`
         if isinstance(resultados, str):
