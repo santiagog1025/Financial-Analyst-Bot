@@ -191,7 +191,7 @@ def generar_graficos(datos_financieros: pd.DataFrame, ticker: str) -> str:
                       xaxis_rangeslider_visible=False)
 
     # Guardar el gráfico como archivo HTML
-    ruta_html = f'C:\\Users\\nitro\Desktop\\Trabajos_genAi\\LangGraph\\rutas\\{ticker}_analisis_financiero.html'
+    ruta_html = f'./grafico/{ticker}_analisis_financiero.html'
     fig.write_html(ruta_html)
 
     return ruta_html
