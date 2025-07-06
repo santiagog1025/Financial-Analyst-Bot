@@ -3,8 +3,8 @@ import requests
 from streamlit.components.v1 import html
 
 # URLs del backend
-BACKEND_URL_DATOS = "http://127.0.0.1:8000/generar_datos/"
-BACKEND_URL_PDF = "http://127.0.0.1:8000/descargar_pdf/"
+BACKEND_URL_DATOS = "http://localhost:8000/generar_datos/"
+BACKEND_URL_PDF = "http://localhost:8000/descargar_pdf/"
 
 st.title("Generador de Reportes Financieros")
 

@@ -3,12 +3,14 @@ langchain-groq
 langchain-core
 langchain-experimental
 langchain-community
-dotenv
+python-dotenv
 pandas
 yfinance
 fastapi
+uvicorn
 markdown
 plotly
 reportlab
 bs4
 streamlit
+requests

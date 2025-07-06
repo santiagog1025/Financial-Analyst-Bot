@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  financial-analyst-bot:
+    build: .
+    ports:
+      - "8000:8000"  # FastAPI backend
+      - "8501:8501"  # Streamlit frontend
+    environment:
+      - PYTHONPATH=/app
+    volumes:
+      - ./temp:/app/temp  # For temporary files
+      - ./static:/app/static  # For static files
+    env_file:
+      - .env  # Load environment variables from .env file
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
