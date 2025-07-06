@@ -1,22 +1,33 @@
 version: '3.8'
 
 services:
-  financial-analyst-bot:
+  backend:
     build: .
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
     ports:
-      - "8000:8000"  # FastAPI backend
-      - "8501:8501"  # Streamlit frontend
+      - "8000:8000"
     environment:
       - PYTHONPATH=/app
     volumes:
-      - ./temp:/app/temp  # For temporary files
-      - ./static:/app/static  # For static files
+      - ./temp:/app/temp
+      - ./static:/app/static
     env_file:
-      - .env  # Load environment variables from .env file
+      - .env
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+
+  frontend:
+    build: .
+    command: streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+    ports:
+      - "8501:8501"
+    environment:
+      - PYTHONPATH=/app
+      - BACKEND_HOST=backend
+    volumes:
+      - ./temp:/app/temp
+      - ./static:/app/static
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    restart: unless-stopped

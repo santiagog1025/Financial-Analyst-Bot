@@ -27,6 +27,14 @@ This guide explains how to run the Financial Analyst Bot using Docker.
    - FastAPI Backend: http://localhost:8000
    - API Documentation: http://localhost:8000/docs
 
+## Architecture
+
+The application uses a microservices architecture with Docker Compose:
+
+- **Backend Service**: FastAPI application running on port 8000
+- **Frontend Service**: Streamlit application running on port 8501
+- **Communication**: Frontend communicates with backend via Docker's internal network
+
 ## Alternative Docker Commands
 
 ### Build the image manually

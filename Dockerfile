@@ -27,20 +27,8 @@ COPY . .
 # Create directories for generated files
 RUN mkdir -p /app/static /app/temp
 
-# Expose ports for both FastAPI and Streamlit
+# Expose ports
 EXPOSE 8000 8501
 
-# Create startup script
-RUN echo '#!/bin/bash\n\
-# Start FastAPI backend in background\n\
-uvicorn main:app --host 0.0.0.0 --port 8000 &\n\
-\n\
-# Wait a moment for FastAPI to start\n\
-sleep 5\n\
-\n\
-# Start Streamlit frontend\n\
-streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true\n\
-' > /app/start.sh && chmod +x /app/start.sh
-
-# Default command
-CMD ["/app/start.sh"]
+# Default command (will be overridden by docker-compose)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -3,8 +3,10 @@ import requests
 from streamlit.components.v1 import html
 
 # URLs del backend
-BACKEND_URL_DATOS = "http://localhost:8000/generar_datos/"
-BACKEND_URL_PDF = "http://localhost:8000/descargar_pdf/"
+import os
+BACKEND_HOST = os.getenv("BACKEND_HOST", "localhost")
+BACKEND_URL_DATOS = f"http://{BACKEND_HOST}:8000/generar_datos/"
+BACKEND_URL_PDF = f"http://{BACKEND_HOST}:8000/descargar_pdf/"
 
 st.title("Generador de Reportes Financieros")
 
@@ -24,18 +26,26 @@ with st.form("form_reporte"):
     if submit_button:
         # Obtener datos del reporte y la gráfica
         with st.spinner("Generando datos del reporte..."):
-            datos_response = requests.post(
-                BACKEND_URL_DATOS,
-                data={"consulta": consulta}
-            )
-            if datos_response.status_code == 200:
-                response_data = datos_response.json()
-                reporte_texto = response_data["reporte_texto"]
-                ruta_figura = response_data["ruta_figura"]
-                reporte_id = response_data["reporte_id"]
-                st.success("¡Datos cargados con éxito!")
-            else:
-                st.error("Error al cargar los datos del reporte.")
+            try:
+                datos_response = requests.post(
+                    BACKEND_URL_DATOS,
+                    data={"consulta": consulta},
+                    timeout=30
+                )
+                if datos_response.status_code == 200:
+                    response_data = datos_response.json()
+                    reporte_texto = response_data["reporte_texto"]
+                    ruta_figura = response_data["ruta_figura"]
+                    reporte_id = response_data["reporte_id"]
+                    st.success("¡Datos cargados con éxito!")
+                else:
+                    st.error(f"Error al cargar los datos del reporte. Status: {datos_response.status_code}")
+            except requests.exceptions.ConnectionError:
+                st.error("No se puede conectar al backend. Asegúrate de que el servicio FastAPI esté ejecutándose.")
+            except requests.exceptions.Timeout:
+                st.error("Timeout al conectar con el backend. El proceso puede tardar más de lo esperado.")
+            except Exception as e:
+                st.error(f"Error inesperado: {str(e)}")
 
 # Función para mostrar el reporte
 def generar_report(reporte_texto):
