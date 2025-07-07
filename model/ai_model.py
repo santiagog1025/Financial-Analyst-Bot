@@ -42,7 +42,7 @@ def ObtenerNoticias(ticker: str) -> str:
     """
     try:
         # Inicializar la herramienta de búsqueda
-        wrapper = DuckDuckGoSearchAPIWrapper(region="us-en", time="10d", max_results=5)
+        wrapper = DuckDuckGoSearchAPIWrapper(region="us-en", time="5d", max_results=5)
         news_tool = DuckDuckGoSearchResults(api_wrapper=wrapper)
         
         # Ejecutar la búsqueda
