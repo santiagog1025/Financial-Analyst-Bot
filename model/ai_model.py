@@ -5,8 +5,7 @@ from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 from langchain_core.tools import tool
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
-from langchain_community.tools import DuckDuckGoSearchResults
-from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
+from ddgs import DDGS
 from typing import List, TypedDict, Annotated
 import operator
 import yfinance as yf
@@ -25,7 +24,7 @@ def ObtenerDatosFinancieros(ticker: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame: DataFrame con los datos financieros históricos.
     """
-    df = yf.download(ticker, period="1y")  # Últimos 5 años de datos
+    df = yf.download(ticker, period="1y", auto_adjust=True)  # Último año
     datos_financieros =  df.sort_values(by='Date')
     return datos_financieros
 
@@ -41,36 +40,25 @@ def ObtenerNoticias(ticker: str) -> str:
         str: Noticias obtenidas en formato de texto.
     """
     try:
-        # Inicializar la herramienta de búsqueda
-        wrapper = DuckDuckGoSearchAPIWrapper(region="us-en", time="5d", max_results=5)
-        news_tool = DuckDuckGoSearchResults(api_wrapper=wrapper)
-        
-        # Ejecutar la búsqueda
-        resultados = news_tool.invoke({"query": f"{ticker} stock news"})
-        
-        # Verificar tipo de `resultados`
-        if isinstance(resultados, str):
-            # Si es una cadena, simplemente devuélvela
-            return resultados
-        elif isinstance(resultados, list):
-            # Procesar como lista de diccionarios
+        with DDGS() as ddgs:
+            # Usamos el ticker como parte de la búsqueda
+            query = f"{ticker} stock news"
+            max_results = 2
+            results = ddgs.text(query, max_results=max_results)
             noticias = []
-            for resultado in resultados:
-                if isinstance(resultado, dict):  # Asegurarse de que cada elemento sea un diccionario
-                    titulo = resultado.get('title', 'Sin título')
-                    enlace = resultado.get('link', '#')
-                    snippet = resultado.get('snippet', 'Sin descripción')
-                    noticias.append(f"{titulo}\n{snippet}\n{enlace}")
-            return "\n\n".join(noticias)
-        else:
-            return "No se encontraron resultados válidos."
+            for r in results:
+                titulo = r.get("title", "Sin título")
+                enlace = r.get("href", "#")
+                snippet = r.get("body", "Sin descripción")
+                noticias.append(f"{titulo}\n{snippet}\n{enlace}")
+            return "\n\n".join(noticias) if noticias else "No se encontraron noticias relevantes."
     except Exception as e:
         return f"Hubo un error al obtener las noticias de {ticker}: {str(e)}"
 
 class AgenteProcesadorConsulta:
     def __init__(self):
         # Inicializa el LLM de OpenAI con la clave API proporcionada
-        self.llm = ChatGroq(temperature=0, model="llama-3.1-8b-instant")
+        self.llm = ChatGroq(temperature=0, model="meta-llama/llama-4-maverick-17b-128e-instruct")
         # Define la plantilla del prompt para extraer el ticker
         self.prompt = PromptTemplate(
             input_variables=["consulta"],
@@ -92,7 +80,7 @@ class AgenteAnalizarDatos:
         Inicializa el agente de análisis de datos financieros.
         """
         # Inicializar el modelo de lenguaje con la clave de API
-        self.llm = ChatGroq(temperature=0, model="llama3-70b-8192")
+        self.llm = ChatGroq(temperature=0, model="meta-llama/llama-4-maverick-17b-128e-instruct")
 
     def ejecutar(self, datos_financieros: pd.DataFrame, consulta: str) -> str:
         """
@@ -148,7 +136,7 @@ class AgenteAnalizarDatos:
 class AgenteAsesorFinanciero:
     def __init__(self):
         # Inicializa el LLM
-        self.llm = ChatGroq(temperature=1, model="gemma2-9b-it")
+        self.llm = ChatGroq(temperature=1, model="meta-llama/llama-4-maverick-17b-128e-instruct")
         # Define la plantilla del prompt para extraer el ticker
         self.prompt = PromptTemplate(
             input_variables=["consulta","respuesta_analisis","noticias","fecha"],
@@ -219,7 +207,7 @@ def extraer_ticker(estado: Estado) -> Estado:
     return estado
 def obtener_datos_financieros(estado: Estado) -> Estado:
     if estado["ticker"]:
-        df = ObtenerDatosFinancieros(estado["ticker"][-1])
+        df = ObtenerDatosFinancieros.invoke(estado["ticker"][-1])
         estado["datos_financieros"].append(df)
     return estado
 def analizar_datos(estado: Estado) -> Estado:
@@ -234,7 +222,7 @@ def analizar_datos(estado: Estado) -> Estado:
 def obtener_noticias(estado: Estado) -> Estado:
     if estado["ticker"][-1]:
         ticker = estado["ticker"][-1]
-        noticias = ObtenerNoticias(ticker)
+        noticias = ObtenerNoticias.invoke(ticker)
         estado["noticias"].append(noticias)
     return estado
 
@@ -254,22 +242,10 @@ grafico.add_edge(START, "extraer_ticker")
 grafico.add_edge("extraer_ticker", "obtener_datos_financieros")
 grafico.add_edge("extraer_ticker", "obtener_noticias")
 grafico.add_edge("obtener_datos_financieros", "analizar_datos")
-grafico.add_edge("analizar_datos", "analista_financiero")
-grafico.add_edge("obtener_noticias", "analista_financiero")
+grafico.add_node("esperar_ambos", lambda x: x)  # Nodo de sincronización
+grafico.add_edge("analizar_datos", "esperar_ambos")
+grafico.add_edge("obtener_noticias", "esperar_ambos")
+grafico.add_edge("esperar_ambos", "analista_financiero")
 grafico.add_edge("analista_financiero", END)
 
 app = grafico.compile()
-
-def correr_modelo(consulta: str):
-    estado_inicial = {
-    "consulta": [consulta],
-    "ticker": [],
-    "datos_financieros": [],
-    "respuesta_analisis": [],
-    "ruta_html": [],
-    "noticias": [],
-    "respuesta_final": []
-}
-    estado_final = app.invoke(estado_inicial)
-    print(estado_final)
-    return estado_final
