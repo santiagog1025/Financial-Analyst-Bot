@@ -24,9 +24,47 @@ def ObtenerDatosFinancieros(ticker: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame: DataFrame con los datos financieros históricos.
     """
-    df = yf.download(ticker, period="1y", auto_adjust=True)  # Último año
-    datos_financieros =  df.sort_values(by='Date')
-    return datos_financieros
+    try:
+        # Descargar datos - usar group_by='ticker' para evitar MultiIndex cuando sea un solo ticker
+        df = yf.download(ticker, period="1y", auto_adjust=False, group_by='ticker')
+
+        # Debug: Imprimir información sobre las columnas
+        print(f"Columnas descargadas para {ticker}: {list(df.columns)}")
+        print(f"Tipo de columnas: {type(df.columns)}")
+        print(f"Shape del DataFrame: {df.shape}")
+
+        # Si el DataFrame está vacío, intentar con auto_adjust=True
+        if df.empty:
+            print(f"Datos vacíos con auto_adjust=False, intentando con auto_adjust=True")
+            df = yf.download(ticker, period="1y", auto_adjust=True, group_by='ticker')
+            print(f"Columnas con auto_adjust=True: {list(df.columns)}")
+
+        # Manejar MultiIndex si existe
+        if isinstance(df.columns, pd.MultiIndex):
+            print(f"MultiIndex detectado con {df.columns.nlevels} niveles")
+            if df.columns.nlevels == 2:
+                # Para un solo ticker, el primer nivel será el ticker y el segundo los nombres de columnas
+                # Usar solo el segundo nivel (nombres de columnas)
+                df.columns = df.columns.get_level_values(1)
+                print(f"Columnas después de aplanar MultiIndex: {list(df.columns)}")
+
+        # Verificar si el índice es 'Date' y resetear si es necesario
+        if df.index.name == 'Date':
+            df = df.reset_index()
+            datos_financieros = df.sort_values(by='Date').set_index('Date')
+        else:
+            # Si el índice ya es datetime, solo ordenar
+            datos_financieros = df.sort_index()
+
+        print(f"Datos financieros finales para {ticker}: {datos_financieros.shape}")
+        print(f"Columnas finales: {list(datos_financieros.columns)}")
+
+        return datos_financieros
+
+    except Exception as e:
+        print(f"Error al obtener datos financieros para {ticker}: {e}")
+        # Retornar DataFrame vacío en caso de error
+        return pd.DataFrame()
 
 @tool
 def ObtenerNoticias(ticker: str) -> str:
@@ -98,45 +136,100 @@ class AgenteAnalizarDatos:
 
         # Crear el mensaje de sistema con la fecha y hora actuales
         mensaje_sistema = f"""
-                    You are a financial analyst specializing in historical stock data analysis. You work with datasets already filtered by the corresponding ticker symbol, so there is no need for additional filtering by symbol. 
+                    You are a financial analyst specializing in historical stock data analysis. You work with datasets already filtered by the corresponding ticker symbol, so there is no need for additional filtering by symbol.
                     The data is provided in a structured format, typically as a Pandas DataFrame.
-                    Context: The dataset comes from Yahoo Finance and contains historical data for the last 5 years of the stock. 
-                    The data is structured as a Pandas DataFrame, with each row representing a trading day. The columns include, among others, the date, the opening price, closing price, high price, low price, and trading volume. 
-                    The Date column is set as the index of the DataFrame.
-                    Your task is:
+                    Context: The dataset comes from Yahoo Finance and contains historical data for the last year of the stock.
+                    The data is structured as a Pandas DataFrame, with each row representing a trading day. The columns include: Date (index), Open, High, Low, Close, Adj Close, Volume.
 
-                    Average Closing Price Over the Last 7 Days:
+                    Your task is to calculate these 3 specific metrics ONLY:
 
-                    Calculate the average closing price of the stock over the last 7 days based on the provided data.
-                    7-Day Price Trend:
+                    1. Average Closing Price Over the Last 7 Days: df['Close'].tail(7).mean()
+                    2. 200-Period Moving Average: df['Close'].rolling(window=200).mean().iloc[-1]
+                    3. 30-Day Price Trend: Compare current price with price 30 days ago to determine if trend is upward, downward, or neutral.
 
-                    Analyze the stock's price trend over the last 30 days. Provide insights on whether the trend is upward, downward, or neutral.
-                    200-Period Moving Average:
+                    CRITICAL INSTRUCTIONS:
+                    - Use ONLY simple pandas operations as shown above
+                    - Do NOT use complex analysis or additional calculations
+                    - Do NOT iterate more than 2 times
+                    - If any calculation fails, skip it and continue with the others
+                    - Provide results in a simple format: "7-day average: $X, 200-day MA: $Y, 30-day trend: direction"
 
-                    Calculate the 200-period moving average to assess the stock's long-term trend.
-                    Use only methods from the pandas library to perform these calculations and analyses. 
-                    The current date and time are: {fecha_hora_actual}.If you already iterate more than 3 times on the same code just run the other step.
+                    The current date and time are: {fecha_hora_actual}.
                     """
 
-        # Crear el agente de Pandas
+        # Crear el agente de Pandas con límites estrictos
         agente = create_pandas_dataframe_agent(
             llm=self.llm,
             df=datos_financieros,
-            verbose=True,
+            verbose=False,  # Reducir verbosidad para mejorar rendimiento
             allow_dangerous_code=True,
-            agent_executor_kwargs={
-                "handle_parsing_errors": True  # Manejar errores de análisis
-            }
+            max_iterations=2,  # Límite máximo de iteraciones
+            max_execution_time=20  # Límite de tiempo en segundos
         )
 
-        # Ejecutar la consulta utilizando el agente con el mensaje de sistema
-        respuesta = agente.invoke({"input": ["What is the mean average of 200 periods and the price of the last 7 days?", mensaje_sistema]})
-        return respuesta["output"]
+        try:
+            # Ejecutar la consulta utilizando el agente con el mensaje de sistema
+            respuesta = agente.invoke({
+                "input": "Calculate: 1) df['Close'].tail(7).mean() 2) df['Close'].rolling(200).mean().iloc[-1] 3) Compare current vs 30-day ago price. " + mensaje_sistema
+            })
+            return respuesta["output"]
+        except Exception as e:
+            # Si hay un error o timeout, devolver un análisis básico
+            print(f"Error en análisis pandas: {e}")
+            return self._analisis_basico(datos_financieros)
+
+    def _analisis_basico(self, df: pd.DataFrame) -> str:
+        """
+        Realiza un análisis básico si el agente pandas falla.
+        """
+        try:
+            # Análisis básico usando pandas directamente
+            if 'Close' in df.columns and len(df) > 0:
+                # Últimos 7 días promedio
+                avg_7_days = df['Close'].tail(7).mean()
+
+                # Media móvil de 200 períodos
+                if len(df) >= 200:
+                    ma_200 = df['Close'].rolling(window=200).mean().iloc[-1]
+                else:
+                    ma_200 = df['Close'].mean()  # Usar promedio total si no hay suficientes datos
+
+                # Tendencia de 30 días
+                if len(df) >= 30:
+                    price_30_days_ago = df['Close'].iloc[-30]
+                    current_price = df['Close'].iloc[-1]
+                    trend_pct = ((current_price - price_30_days_ago) / price_30_days_ago) * 100
+
+                    if trend_pct > 2:
+                        trend = f"alcista (+{trend_pct:.1f}%)"
+                    elif trend_pct < -2:
+                        trend = f"bajista ({trend_pct:.1f}%)"
+                    else:
+                        trend = f"neutral ({trend_pct:.1f}%)"
+                else:
+                    current_price = df['Close'].iloc[-1]
+                    trend = "datos insuficientes para tendencia"
+
+                return f"""
+                Análisis Financiero (Análisis Directo):
+
+                Métricas Calculadas:
+                - Promedio de precio de cierre últimos 7 días: ${avg_7_days:.2f}
+                - Media móvil de 200 períodos: ${ma_200:.2f}
+                - Tendencia de 30 días: {trend}
+                - Precio actual: ${current_price:.2f}
+
+                Nota: Este análisis fue generado directamente debido a limitaciones de tiempo en el procesamiento del agente pandas.
+                """
+            else:
+                return "No se pudieron analizar los datos financieros - datos insuficientes o columna 'Close' no encontrada."
+        except Exception as e:
+            return f"Error en análisis básico: {str(e)}"
 
 class AgenteAsesorFinanciero:
     def __init__(self):
         # Inicializa el LLM
-        self.llm = ChatGroq(temperature=1, model="meta-llama/llama-4-maverick-17b-128e-instruct")
+        self.llm = ChatGroq(temperature=1, model="llama-3.3-70b-versatile")
         # Define la plantilla del prompt para extraer el ticker
         self.prompt = PromptTemplate(
             input_variables=["consulta","respuesta_analisis","noticias","fecha"],
@@ -249,3 +342,18 @@ grafico.add_edge("esperar_ambos", "analista_financiero")
 grafico.add_edge("analista_financiero", END)
 
 app = grafico.compile()
+
+
+def correr_modelo(consulta: str):
+    estado_inicial = {
+    "consulta": [consulta],
+    "ticker": [],
+    "datos_financieros": [],
+    "respuesta_analisis": [],
+    "ruta_html": [],
+    "noticias": [],
+    "respuesta_final": []
+}
+    estado_final = app.invoke(estado_inicial)
+    print(estado_final)
+    return estado_final

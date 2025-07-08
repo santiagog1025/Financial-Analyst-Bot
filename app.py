@@ -30,7 +30,7 @@ with st.form("form_reporte"):
                 datos_response = requests.post(
                     BACKEND_URL_DATOS,
                     data={"consulta": consulta},
-                    timeout=30
+                    timeout=60  # Aumentar timeout a 60 segundos
                 )
                 if datos_response.status_code == 200:
                     response_data = datos_response.json()
@@ -38,14 +38,22 @@ with st.form("form_reporte"):
                     ruta_figura = response_data["ruta_figura"]
                     reporte_id = response_data["reporte_id"]
                     st.success("¡Datos cargados con éxito!")
+                elif datos_response.status_code == 408:
+                    st.error("⏱️ El análisis está tomando más tiempo del esperado. El agente pandas puede estar iterando demasiado. Por favor, intenta nuevamente.")
+                elif datos_response.status_code == 500:
+                    try:
+                        error_data = datos_response.json()
+                        st.error(f"Error del servidor: {error_data.get('detail', 'Error interno')}")
+                    except:
+                        st.error("Error interno del servidor. Por favor, intenta nuevamente.")
                 else:
                     st.error(f"Error al cargar los datos del reporte. Status: {datos_response.status_code}")
             except requests.exceptions.ConnectionError:
-                st.error("No se puede conectar al backend. Asegúrate de que el servicio FastAPI esté ejecutándose.")
+                st.error("🔌 No se puede conectar al backend. Asegúrate de que el servicio FastAPI esté ejecutándose.")
             except requests.exceptions.Timeout:
-                st.error("Timeout al conectar con el backend. El proceso puede tardar más de lo esperado.")
+                st.error("⏱️ Timeout al conectar con el backend. El análisis puede estar tomando más tiempo del esperado debido a múltiples iteraciones del agente pandas.")
             except Exception as e:
-                st.error(f"Error inesperado: {str(e)}")
+                st.error(f"❌ Error inesperado: {str(e)}")
 
 # Función para mostrar el reporte
 def generar_report(reporte_texto):

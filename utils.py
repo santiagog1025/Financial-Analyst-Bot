@@ -136,62 +136,173 @@ def escribir_parrafo(pdf, tag, x_inicial, ancho_texto, y, y_minimo, tipo="p", es
 
     return y
 def generar_graficos(datos_financieros: pd.DataFrame, ticker: str) -> str:
-    """
-    Genera gráficos financieros interactivos utilizando Plotly.
+    import os
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
 
-    Args:
-        datos_financieros (pd.DataFrame): DataFrame con los datos financieros.
-        ticker (str): Símbolo del ticker de la empresa.
+    # Debug: Print column information
+    print(f"Columnas disponibles: {list(datos_financieros.columns)}")
+    print(f"Tipo de columnas: {type(datos_financieros.columns)}")
 
-    Returns:
-        str: Ruta del archivo HTML generado con los gráficos.
-    """
-    # Verificar si el DataFrame contiene las columnas necesarias
+    # Manejar MultiIndex columns correctamente
+    if isinstance(datos_financieros.columns, pd.MultiIndex):
+        print(f"MultiIndex detectado. Niveles: {datos_financieros.columns.nlevels}")
+        print(f"Nivel 0: {datos_financieros.columns.get_level_values(0).tolist()}")
+        print(f"Nivel 1: {datos_financieros.columns.get_level_values(1).tolist()}")
+
+        # Para yfinance, el primer nivel es el ticker y el segundo nivel son los nombres de las columnas
+        # Usar el segundo nivel (nivel 1) que contiene los nombres reales de las columnas
+        datos_financieros.columns = datos_financieros.columns.get_level_values(1)
+        print(f"Columnas después de MultiIndex: {list(datos_financieros.columns)}")
+
+    # Mapear nombres de columnas comunes que puede devolver yfinance
+    column_mapping = {
+        'Adj Close': 'Close',
+        'adj close': 'Close',
+        'open': 'Open',
+        'high': 'High',
+        'low': 'Low',
+        'close': 'Close',
+        'volume': 'Volume'
+    }
+
+    # Renombrar columnas si es necesario
+    datos_financieros = datos_financieros.rename(columns=column_mapping)
+
+    # Verificar columnas requeridas con más flexibilidad
     columnas_requeridas = ['Open', 'High', 'Low', 'Close', 'Volume']
+    columnas_faltantes = []
+
     for columna in columnas_requeridas:
         if columna not in datos_financieros.columns:
-            raise ValueError(f"El DataFrame no contiene la columna '{columna}'.")
+            columnas_faltantes.append(columna)
 
-    # Calcular medias móviles
-    datos_financieros['MA20'] = datos_financieros['Close'].rolling(window=20).mean()
-    datos_financieros['MA50'] = datos_financieros['Close'].rolling(window=50).mean()
+    if columnas_faltantes:
+        print(f"Columnas disponibles después del mapeo: {list(datos_financieros.columns)}")
+        print(f"Columnas faltantes: {columnas_faltantes}")
 
-    # Crear subplots: 2 filas (Gráfico de velas y volumen)
+        # Intentar usar solo las columnas disponibles para un gráfico más simple
+        if 'Close' in datos_financieros.columns or 'Adj Close' in datos_financieros.columns:
+            return generar_grafico_simple(datos_financieros, ticker)
+        else:
+            raise ValueError(f"No se pueden generar gráficos. Columnas faltantes: {columnas_faltantes}. Columnas disponibles: {list(datos_financieros.columns)}")
+
+    os.makedirs("./grafico", exist_ok=True)
+
+    # Create a copy to avoid modifying the original DataFrame
+    df_copy = datos_financieros.copy()
+
+    # Calculate moving averages safely
+    try:
+        df_copy['MA20'] = df_copy['Close'].rolling(window=20).mean()
+        df_copy['MA50'] = df_copy['Close'].rolling(window=50).mean()
+    except Exception as e:
+        print(f"Error calculando medias móviles: {e}")
+        # If there's an error, create the moving averages as separate series
+        ma20 = df_copy['Close'].rolling(window=20).mean()
+        ma50 = df_copy['Close'].rolling(window=50).mean()
+    else:
+        ma20 = df_copy['MA20']
+        ma50 = df_copy['MA50']
+
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                        vertical_spacing=0.02, subplot_titles=(f'Gráfico de Velas de {ticker}',
-                                                               'Volumen de Transacciones'),
+                        vertical_spacing=0.02,
+                        subplot_titles=(f'Gráfico de Velas de {ticker}', 'Volumen'),
                         row_heights=[0.7, 0.3])
 
-    # Gráfico de velas
-    fig.add_trace(go.Candlestick(x=datos_financieros.index,
-                                 open=datos_financieros['Open'],
-                                 high=datos_financieros['High'],
-                                 low=datos_financieros['Low'],
-                                 close=datos_financieros['Close'],
-                                 name='Velas'),
-                  row=1, col=1)
+    fig.add_trace(go.Candlestick(
+        x=df_copy.index,
+        open=df_copy['Open'],
+        high=df_copy['High'],
+        low=df_copy['Low'],
+        close=df_copy['Close'],
+        name='Velas'), row=1, col=1)
 
-    # Agregar medias móviles al gráfico de velas
-    fig.add_trace(go.Scatter(x=datos_financieros.index, y=datos_financieros['MA20'],
-                             mode='lines', name='MA 20 días'),
-                  row=1, col=1)
-    fig.add_trace(go.Scatter(x=datos_financieros.index, y=datos_financieros['MA50'],
-                             mode='lines', name='MA 50 días'),
-                  row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_copy.index,
+                             y=ma20,
+                             mode='lines', name='MA 20 días'), row=1, col=1)
 
-    # Gráfico de volumen
-    fig.add_trace(go.Bar(x=datos_financieros.index, y=datos_financieros['Volume'],
-                         showlegend=False),
-                  row=2, col=1)
+    fig.add_trace(go.Scatter(x=df_copy.index,
+                             y=ma50,
+                             mode='lines', name='MA 50 días'), row=1, col=1)
 
-    # Actualizar el diseño
+    fig.add_trace(go.Bar(x=df_copy.index,
+                         y=df_copy['Volume'],
+                         showlegend=False), row=2, col=1)
+
     fig.update_layout(title=f'Análisis Financiero de {ticker}',
-                      yaxis_title='Precio',
-                      xaxis_title='Fecha',
                       xaxis_rangeslider_visible=False)
 
-    # Guardar el gráfico como archivo HTML
-    ruta_html = f'./grafico/{ticker}_analisis_financiero.html'
+    ruta_html = f"./grafico/{ticker}_analisis_financiero.html"
     fig.write_html(ruta_html)
+    return ruta_html
 
+def generar_grafico_simple(datos_financieros: pd.DataFrame, ticker: str) -> str:
+    """
+    Genera un gráfico simple cuando no están disponibles todas las columnas OHLCV.
+    """
+    import os
+    import plotly.graph_objects as go
+
+    os.makedirs("./grafico", exist_ok=True)
+
+    fig = go.Figure()
+
+    # Determinar qué columna de precio usar
+    price_column = None
+    if 'Close' in datos_financieros.columns:
+        price_column = 'Close'
+    elif 'Adj Close' in datos_financieros.columns:
+        price_column = 'Adj Close'
+
+    if price_column:
+        # Create a copy to avoid modifying the original DataFrame
+        df_copy = datos_financieros.copy()
+
+        # Calculate moving averages safely
+        ma20 = df_copy[price_column].rolling(window=20).mean()
+        ma50 = df_copy[price_column].rolling(window=50).mean()
+
+        fig.add_trace(go.Scatter(
+            x=df_copy.index,
+            y=df_copy[price_column],
+            mode='lines',
+            name=f'Precio de {price_column}',
+            line=dict(color='blue')
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=df_copy.index,
+            y=ma20,
+            mode='lines',
+            name='MA 20 días',
+            line=dict(color='orange')
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=df_copy.index,
+            y=ma50,
+            mode='lines',
+            name='MA 50 días',
+            line=dict(color='red')
+        ))
+    else:
+        # Si no hay columnas de precio, crear un gráfico vacío con mensaje
+        fig.add_annotation(
+            text=f"No hay datos de precio disponibles para {ticker}",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, xanchor='center', yanchor='middle',
+            showarrow=False,
+            font=dict(size=16)
+        )
+
+    fig.update_layout(
+        title=f'Análisis de Precio de {ticker}',
+        xaxis_title='Fecha',
+        yaxis_title='Precio ($)',
+        hovermode='x unified'
+    )
+
+    ruta_html = f"./grafico/{ticker}_analisis_financiero.html"
+    fig.write_html(ruta_html)
     return ruta_html
